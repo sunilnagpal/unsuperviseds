@@ -1,0 +1,60 @@
+# Install required libraries
+if (!requireNamespace("vegan", quietly = TRUE)) install.packages("vegan")
+if (!requireNamespace("ggplot2", quietly = TRUE)) install.packages("ggplot2")
+if (!requireNamespace("randomcoloR", quietly = TRUE)) install.packages("randomcoloR")
+if (!requireNamespace("data.table", quietly = TRUE)) install.packages("data.table")
+
+# Load libraries
+library(vegan)
+library(ggplot2)
+library(randomcoloR)
+library(data.table)
+
+#refer line 41 and 49 to change metadata column and legend to be visualized
+
+abundance_data <- fread("input.csv", header = TRUE, sep = ",", data.table = FALSE)
+metadata <- fread("metadata.txt", header = TRUE, sep = ",", data.table = FALSE)
+
+rownames(abundance_data) <- abundance_data[, 1]
+abundance_data <- abundance_data[, -1] # Remove the genome names column
+
+# Match metadata with abundance data
+metadata <- metadata[metadata[, 1] %in% colnames(abundance_data), ]
+rownames(metadata) <- metadata[, 1]
+metadata <- metadata[, -1] # Remove the genome names column
+
+
+distance_matrix <- vegdist(t(abundance_data), method = "bray")
+
+# Perform PCoA
+pcoa_result <- cmdscale(distance_matrix, k = 2, eig = TRUE)
+pcoa_df <- as.data.frame(pcoa_result$points)
+colnames(pcoa_df) <- c("PC1", "PC2")
+pcoa_df$Genome <- rownames(pcoa_df)
+
+
+pcoa_df <- merge(pcoa_df, metadata, by.x = "Genome", by.y = "row.names", all.x = TRUE)
+
+# Plot
+metadata_column <- "GENUS"
+
+unique_categories <- unique(pcoa_df[[metadata_column]])
+num_colors <- length(unique_categories)
+
+# Generate a distinct color palette
+palette <- distinctColorPalette(num_colors)
+
+show_legend <- TRUE # Set to FALSE to hide the legend
+
+# Plot with dynamic legend control
+ggplot(pcoa_df, aes(x = PC1, y = PC2, color = !!sym(metadata_column))) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = paste("PCoA ",metadata_column), x = "PC1", y = "PC2") +
+  theme(
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    legend.position = ifelse(show_legend, "bottom", "none") # Show legend or hide it
+  ) +
+  scale_color_manual(values = palette) +
+  guides(color = if (show_legend) guide_legend(nrow = ceiling(num_colors / 3)) else "none") # Multi-row or no legend
